@@ -1,5 +1,5 @@
 <img src="macOS/Resources/dimo-watercolor.png" alt="迪莫头像" width="180" align="right">
-<img src="docs/readme-title.svg" alt="迪莫桌宠" width="80%">
+<img src="docs/readme-title.svg" alt="迪莫桌宠" width="72%">
 
 一只安静待在 macOS 桌面角落的迪莫。点击迪莫会展开 Todo 清单，再点击其他地方就会自动收起。
 
