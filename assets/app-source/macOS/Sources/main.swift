@@ -188,6 +188,16 @@ private final class PetModel: ObservableObject {
         ))
     }
 
+    func update(_ id: UUID, text: String, dueAt: Date, period: TodoPeriod?, remindAt: Date?) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = todos.firstIndex(where: { $0.id == id }) else { return }
+        todos[index].text = trimmed
+        todos[index].dueAt = Calendar.current.startOfDay(for: dueAt)
+        todos[index].period = period
+        todos[index].remindAt = todos[index].done ? nil : remindAt
+    }
+
     func toggle(_ id: UUID) {
         guard let index = todos.firstIndex(where: { $0.id == id }) else { return }
         todos[index].done.toggle()
@@ -729,58 +739,7 @@ private struct TodoPanelView: View {
 
     @ViewBuilder
     private func todoRow(_ todo: TodoItem) -> some View {
-        HStack(spacing: 10) {
-            Button {
-                model.toggle(todo.id)
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(todo.done ? Color(red: 0.31, green: 0.46, blue: 0.75) : Color.clear)
-                        .overlay(Circle().stroke(todo.done ? Color.clear : Color(red: 0.56, green: 0.61, blue: 0.72), lineWidth: 1.4))
-                    if todo.done {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .frame(width: 21, height: 21)
-                .frame(width: 30, height: 30)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(todo.done ? "标记为未完成" : "标记为已完成")
-
-            Text(todo.text)
-                .font(.system(size: 13))
-                .foregroundStyle(todo.done ? Color(red: 0.63, green: 0.65, blue: 0.70) : Color(red: 0.20, green: 0.25, blue: 0.36))
-                .strikethrough(todo.done, color: Color(red: 0.64, green: 0.66, blue: 0.71))
-                .lineLimit(2)
-
-            Spacer(minLength: 8)
-
-            if let period = todo.period {
-                Text(period.title)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(
-                        !todo.done && Calendar.current.startOfDay(for: todo.dueAt) < Calendar.current.startOfDay(for: referenceDate)
-                            ? Color(red: 0.79, green: 0.31, blue: 0.27)
-                            : Color(red: 0.51, green: 0.55, blue: 0.65)
-                    )
-            }
-
-            Button {
-                model.remove(todo.id)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.66, green: 0.68, blue: 0.73))
-                    .frame(width: 24, height: 24)
-            }
-            .buttonStyle(.plain)
-            .help("删除：\(todo.text)")
-        }
-        .padding(.vertical, 10)
-        .overlay(Divider().opacity(0.55), alignment: .bottom)
+        TodoRowView(model: model, todo: todo, referenceDate: referenceDate)
     }
 
     private func addTodo() {
@@ -914,6 +873,270 @@ private struct TodoPanelView: View {
         return isToday ? "今天，\(month)月\(day)日" : "星期\(weekdayLabel(date))，\(month)月\(day)日"
     }
 
+}
+
+private struct TodoRowView: View {
+    @ObservedObject var model: PetModel
+    let todo: TodoItem
+    let referenceDate: Date
+    @State private var showingEditor = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                model.toggle(todo.id)
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(todo.done ? Color(red: 0.31, green: 0.46, blue: 0.75) : Color.clear)
+                        .overlay(Circle().stroke(todo.done ? Color.clear : Color(red: 0.56, green: 0.61, blue: 0.72), lineWidth: 1.4))
+                    if todo.done {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(width: 21, height: 21)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(todo.done ? "标记为未完成" : "标记为已完成")
+
+            Text(todo.text)
+                .font(.system(size: 13))
+                .foregroundStyle(todo.done ? Color(red: 0.63, green: 0.65, blue: 0.70) : Color(red: 0.20, green: 0.25, blue: 0.36))
+                .strikethrough(todo.done, color: Color(red: 0.64, green: 0.66, blue: 0.71))
+                .lineLimit(2)
+
+            Spacer(minLength: 8)
+
+            if let period = todo.period {
+                Text(period.title)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(
+                        !todo.done && Calendar.current.startOfDay(for: todo.dueAt) < Calendar.current.startOfDay(for: referenceDate)
+                            ? Color(red: 0.79, green: 0.31, blue: 0.27)
+                            : Color(red: 0.51, green: 0.55, blue: 0.65)
+                    )
+            }
+
+            Button {
+                showingEditor = true
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.47, green: 0.54, blue: 0.68))
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .help("修改：\(todo.text)")
+            .popover(isPresented: $showingEditor, arrowEdge: .trailing) {
+                EditTodoView(model: model, todo: todo) {
+                    showingEditor = false
+                }
+            }
+
+            Button {
+                model.remove(todo.id)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.66, green: 0.68, blue: 0.73))
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .help("删除：\(todo.text)")
+        }
+        .padding(.vertical, 10)
+        .overlay(Divider().opacity(0.55), alignment: .bottom)
+    }
+}
+
+private struct EditTodoView: View {
+    @ObservedObject var model: PetModel
+    private let todoID: UUID
+    private let done: Bool
+    private let close: () -> Void
+    @State private var text: String
+    @State private var dueAt: Date
+    @State private var period: TodoPeriod?
+    @State private var reminderEnabled: Bool
+    @State private var remindAt: Date
+    @FocusState private var textFocused: Bool
+
+    init(model: PetModel, todo: TodoItem, close: @escaping () -> Void) {
+        _model = ObservedObject(wrappedValue: model)
+        todoID = todo.id
+        done = todo.done
+        self.close = close
+        _text = State(initialValue: todo.text)
+        _dueAt = State(initialValue: todo.dueAt)
+        _period = State(initialValue: todo.period)
+        _reminderEnabled = State(initialValue: todo.remindAt != nil && !todo.done)
+        _remindAt = State(initialValue: todo.remindAt ?? Date().addingTimeInterval(10 * 60))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("修改任务")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color(red: 0.19, green: 0.24, blue: 0.37))
+                Spacer()
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(red: 0.52, green: 0.55, blue: 0.63))
+                        .frame(width: 25, height: 25)
+                        .background(Circle().fill(Color(red: 0.94, green: 0.95, blue: 0.98)))
+                }
+                .buttonStyle(.plain)
+            }
+
+            TextField("任务内容", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.82)))
+                .focused($textFocused)
+                .onSubmit(save)
+
+            editRow(icon: "calendar", title: "日期") {
+                DimoDatePicker(selection: $dueAt)
+            }
+
+            editRow(icon: "sun.horizon", title: "时段") {
+                HStack(spacing: 2) {
+                    periodButton("不选", selected: period == nil) { period = nil }
+                    ForEach(TodoPeriod.allCases) { option in
+                        periodButton(option.title, selected: period == option) { period = option }
+                    }
+                }
+                .padding(3)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.72)))
+            }
+
+            editRow(icon: "bell", title: "提醒") {
+                Toggle("", isOn: $reminderEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(done)
+            }
+
+            if reminderEnabled && !done {
+                editRow(icon: "clock", title: "时间") {
+                    DimoDateTimePicker(selection: $remindAt)
+                }
+            }
+
+            if done {
+                Text("已完成任务不会再设置提醒")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color(red: 0.54, green: 0.57, blue: 0.64))
+            }
+
+            HStack(spacing: 9) {
+                Button("取消", action: close)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.37, green: 0.42, blue: 0.54))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 34)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.92, green: 0.94, blue: 0.97)))
+
+                Button("保存修改", action: save)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 34)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.31, green: 0.44, blue: 0.72)))
+            }
+        }
+        .padding(17)
+        .frame(width: 340)
+        .background(Color(red: 0.985, green: 0.982, blue: 0.965))
+        .onAppear { textFocused = true }
+    }
+
+    @ViewBuilder
+    private func editRow<Content: View>(icon: String, title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.39, green: 0.49, blue: 0.70))
+                .frame(width: 14, height: 14)
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color(red: 0.48, green: 0.52, blue: 0.62))
+                .frame(width: 28, alignment: .leading)
+            Spacer()
+            content()
+        }
+    }
+
+    private func periodButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(selected ? Color.white : Color(red: 0.37, green: 0.42, blue: 0.53))
+                .frame(width: 42, height: 26)
+                .background(RoundedRectangle(cornerRadius: 7).fill(selected ? Color(red: 0.31, green: 0.44, blue: 0.72) : Color.clear))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func save() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            textFocused = true
+            return
+        }
+        model.update(todoID, text: trimmed, dueAt: dueAt, period: period, remindAt: reminderEnabled ? remindAt : nil)
+        close()
+    }
+}
+
+private struct DimoDatePicker: View {
+    @Binding var selection: Date
+    @State private var showingCalendar = false
+
+    var body: some View {
+        Button {
+            showingCalendar = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 9, weight: .semibold))
+                Text(dateTitle)
+                    .font(.system(size: 10, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 6, weight: .bold))
+                    .opacity(0.66)
+            }
+            .foregroundStyle(Color(red: 0.32, green: 0.39, blue: 0.56))
+            .padding(.horizontal, 8)
+            .frame(height: 27)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingCalendar, arrowEdge: .bottom) {
+            DimoCalendarPicker(selection: $selection, isPresented: $showingCalendar)
+        }
+    }
+
+    private var dateTitle: String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(selection) { return "今天" }
+        if calendar.isDateInTomorrow(selection) { return "明天" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日"
+        return formatter.string(from: selection)
+    }
 }
 
 private struct DimoDateTimePicker: View {
