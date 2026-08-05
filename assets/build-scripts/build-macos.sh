@@ -2,8 +2,8 @@
 set -euo pipefail
 
 PROJECT_DIR="${0:A:h:h:h}"
-SOURCE_DIR="$PROJECT_DIR/素材/应用源码/macOS"
-VERSION_FILE="$PROJECT_DIR/素材/版本记录/VERSION"
+SOURCE_DIR="$PROJECT_DIR/assets/app-source/macOS"
+VERSION_FILE="$PROJECT_DIR/assets/versioning/VERSION"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 BUILD_DIR="$(mktemp -d /tmp/dimo-pet-build.XXXXXX)"
 APP_DIR="$BUILD_DIR/迪莫桌宠.app"
@@ -30,6 +30,6 @@ chmod 755 "$CONTENTS_DIR/MacOS/DimoPet"
 codesign --force --deep --sign - "$APP_DIR"
 ditto -c -k --sequesterRsrc --keepParent \
   "$APP_DIR" \
-  "$PROJECT_DIR/迪莫桌宠-${VERSION}-macOS-arm64.zip"
+  "$PROJECT_DIR/Dimo-DeskPet-${VERSION}-macOS-arm64.zip"
 
-echo "构建完成：$PROJECT_DIR/迪莫桌宠-${VERSION}-macOS-arm64.zip"
+echo "构建完成：$PROJECT_DIR/Dimo-DeskPet-${VERSION}-macOS-arm64.zip"
