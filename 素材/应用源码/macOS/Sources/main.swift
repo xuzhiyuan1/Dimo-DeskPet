@@ -611,15 +611,7 @@ private struct TodoPanelView: View {
                                 .foregroundStyle(Color(red: 0.48, green: 0.52, blue: 0.62))
                                 .frame(width: 28, alignment: .leading)
                             Spacer()
-                            DatePicker(
-                                "提醒时间",
-                                selection: $draftReminderAt,
-                                in: Date()...,
-                                displayedComponents: [.date, .hourAndMinute]
-                            )
-                            .labelsHidden()
-                            .datePickerStyle(.compact)
-                            .controlSize(.small)
+                            DimoDateTimePicker(selection: $draftReminderAt)
                         }
                         .padding(.horizontal, 4)
                     }
@@ -924,6 +916,257 @@ private struct TodoPanelView: View {
 
 }
 
+private struct DimoDateTimePicker: View {
+    @Binding var selection: Date
+    @State private var showingCalendar = false
+    @State private var showingTime = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Button {
+                showingCalendar = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(dateTitle)
+                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 6, weight: .bold))
+                        .opacity(0.66)
+                }
+                .foregroundStyle(Color(red: 0.32, green: 0.39, blue: 0.56))
+                .padding(.horizontal, 8)
+                .frame(height: 27)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingCalendar, arrowEdge: .bottom) {
+                DimoCalendarPicker(selection: $selection, isPresented: $showingCalendar)
+            }
+
+            Button {
+                showingTime = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(timeTitle)
+                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 6, weight: .bold))
+                        .opacity(0.66)
+                }
+                .foregroundStyle(Color(red: 0.32, green: 0.39, blue: 0.56))
+                .padding(.horizontal, 8)
+                .frame(height: 27)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingTime, arrowEdge: .bottom) {
+                DimoTimePicker(selection: $selection, isPresented: $showingTime)
+            }
+        }
+    }
+
+    private var dateTitle: String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(selection) { return "今天" }
+        if calendar.isDateInTomorrow(selection) { return "明天" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日"
+        return formatter.string(from: selection)
+    }
+
+    private var timeTitle: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: selection)
+    }
+}
+
+private struct DimoCalendarPicker: View {
+    @Binding var selection: Date
+    @Binding var isPresented: Bool
+    @State private var calendarMonth: Date
+
+    init(selection: Binding<Date>, isPresented: Binding<Bool>) {
+        _selection = selection
+        _isPresented = isPresented
+        _calendarMonth = State(initialValue: Self.startOfMonth(selection.wrappedValue))
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Button { moveMonth(by: -1) } label: {
+                    Image(systemName: "chevron.left").frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .disabled(calendarMonth <= Self.startOfMonth(Date()))
+
+                Spacer()
+
+                Text(monthTitle)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(red: 0.25, green: 0.37, blue: 0.67))
+
+                Spacer()
+
+                Button { moveMonth(by: 1) } label: {
+                    Image(systemName: "chevron.right").frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+            }
+            .foregroundStyle(Color(red: 0.43, green: 0.48, blue: 0.59))
+
+            HStack(spacing: 0) {
+                ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { weekday in
+                    Text(weekday)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.57, green: 0.60, blue: 0.68))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 4) {
+                ForEach(Array(gridDates.enumerated()), id: \.offset) { _, date in
+                    if let date {
+                        let selected = Calendar.current.isDate(date, inSameDayAs: selection)
+                        let today = Calendar.current.isDateInToday(date)
+                        let available = date >= Calendar.current.startOfDay(for: Date())
+                        Button {
+                            choose(date)
+                        } label: {
+                            Text(String(Calendar.current.component(.day, from: date)))
+                                .font(.system(size: 10, weight: selected ? .bold : .medium))
+                                .foregroundStyle(
+                                    selected ? Color.white : (available ? Color(red: 0.31, green: 0.35, blue: 0.44) : Color(red: 0.74, green: 0.76, blue: 0.80))
+                                )
+                                .frame(width: 25, height: 25)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(
+                                            selected
+                                                ? Color(red: 0.31, green: 0.44, blue: 0.72)
+                                                : (today ? Color(red: 0.88, green: 0.91, blue: 0.97) : Color.clear)
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!available)
+                    } else {
+                        Color.clear.frame(width: 25, height: 25)
+                    }
+                }
+            }
+        }
+        .padding(13)
+        .frame(width: 236)
+        .background(Color(red: 0.985, green: 0.982, blue: 0.965))
+    }
+
+    private var monthTitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年 M月"
+        return formatter.string(from: calendarMonth)
+    }
+
+    private var gridDates: [Date?] {
+        let calendar = Calendar.current
+        guard let days = calendar.range(of: .day, in: .month, for: calendarMonth) else { return [] }
+        let leadingBlanks = calendar.component(.weekday, from: calendarMonth) - 1
+        var dates = Array<Date?>(repeating: nil, count: leadingBlanks)
+        dates.append(contentsOf: days.compactMap { calendar.date(byAdding: .day, value: $0 - 1, to: calendarMonth) })
+        dates.append(contentsOf: Array<Date?>(repeating: nil, count: (7 - dates.count % 7) % 7))
+        return dates
+    }
+
+    private func choose(_ date: Date) {
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute], from: selection)
+        var day = calendar.dateComponents([.year, .month, .day], from: date)
+        day.hour = time.hour
+        day.minute = time.minute
+        selection = calendar.date(from: day) ?? selection
+        isPresented = false
+    }
+
+    private func moveMonth(by value: Int) {
+        calendarMonth = Calendar.current.date(byAdding: .month, value: value, to: calendarMonth) ?? calendarMonth
+    }
+
+    private static func startOfMonth(_ date: Date) -> Date {
+        Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: date)) ?? date
+    }
+}
+
+private struct DimoTimePicker: View {
+    @Binding var selection: Date
+    @Binding var isPresented: Bool
+
+    private let hourColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
+    private let minuteColumns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 10)
+
+    var body: some View {
+        VStack(spacing: 11) {
+            Text("选择提醒时间")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color(red: 0.25, green: 0.37, blue: 0.67))
+
+            timeSection(title: "小时", values: Array(0..<24), columns: hourColumns)
+            Divider().opacity(0.5)
+            timeSection(title: "分钟", values: Array(0..<60), columns: minuteColumns)
+        }
+        .padding(14)
+        .frame(width: 300)
+        .background(Color(red: 0.985, green: 0.982, blue: 0.965))
+    }
+
+    @ViewBuilder
+    private func timeSection(title: String, values: [Int], columns: [GridItem]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color(red: 0.50, green: 0.54, blue: 0.63))
+            LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(values, id: \.self) { value in
+                    let selected = title == "小时" ? hour == value : minute == value
+                    Button {
+                        updateTime(hour: title == "小时" ? value : hour, minute: title == "分钟" ? value : minute)
+                    } label: {
+                        Text(String(format: "%02d", value))
+                            .font(.system(size: 10, weight: selected ? .bold : .medium))
+                            .foregroundStyle(selected ? Color.white : Color(red: 0.33, green: 0.38, blue: 0.50))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 23)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(selected ? Color(red: 0.31, green: 0.44, blue: 0.72) : Color.white.opacity(0.7))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var hour: Int { Calendar.current.component(.hour, from: selection) }
+    private var minute: Int { Calendar.current.component(.minute, from: selection) }
+
+    private func updateTime(hour: Int, minute: Int) {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: selection)
+        components.hour = hour
+        components.minute = minute
+        let updated = calendar.date(from: components) ?? selection
+        selection = updated < Date() ? Date().addingTimeInterval(60) : updated
+        isPresented = false
+    }
+}
+
 private struct ReminderPanelView: View {
     @ObservedObject var model: PetModel
     @State private var nextReminderAt = Date().addingTimeInterval(15 * 60)
@@ -986,15 +1229,7 @@ private struct ReminderPanelView: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color(red: 0.43, green: 0.47, blue: 0.57))
                         Spacer()
-                        DatePicker(
-                            "下次提醒时间",
-                            selection: $nextReminderAt,
-                            in: Date()...,
-                            displayedComponents: [.date, .hourAndMinute]
-                        )
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .controlSize(.small)
+                        DimoDateTimePicker(selection: $nextReminderAt)
                     }
 
                     HStack(spacing: 9) {
