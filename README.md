@@ -3,7 +3,7 @@
 
 一只安静待在 macOS 桌面角落的迪莫。点击迪莫会展开 Todo 清单，再点击其他地方就会自动收起。
 
-当前版本：**1.2**
+当前版本：**1.3**
 
 <br clear="right">
 
@@ -23,7 +23,7 @@
 
 Apple Silicon Mac（M1/M2/M3/M4 等）下载：
 
-[`Dimo-DeskPet-1.2-macOS-arm64.zip`](Dimo-DeskPet-1.2-macOS-arm64.zip)
+[`Dimo-DeskPet-1.3-macOS-arm64.zip`](Dimo-DeskPet-1.3-macOS-arm64.zip)
 
 解压后把“迪莫桌宠.app”拖进“应用程序”文件夹即可。本项目当前不提供 Intel 版本。
 
@@ -47,4 +47,4 @@ Apple Silicon Mac（M1/M2/M3/M4 等）下载：
 
 - `assets/`：应用源码、图片、图标、制作脚本与版本记录
 - `history/`：新版本发布后，旧版安装包会移到这里
-- `Dimo-DeskPet-1.2-macOS-arm64.zip`：当前可直接安装的版本
+- `Dimo-DeskPet-1.3-macOS-arm64.zip`：当前可直接安装的版本

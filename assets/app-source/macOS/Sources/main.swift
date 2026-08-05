@@ -1599,6 +1599,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var todoWindow: TodoPanel!
     private var reminderWindow: TodoPanel!
     private var petEventMonitor: Any?
+    private var outsideClickMonitor: Any?
     private var petClickStartOrigin: NSPoint?
     private var reminderTimer: Timer?
     private var todosCancellable: AnyCancellable?
@@ -1627,18 +1628,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWindow.didMoveNotification,
             object: petWindow
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(applicationDidResignActive),
-            name: NSApplication.didResignActiveNotification,
-            object: NSApp
-        )
         installPetClickMonitor()
 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let petEventMonitor { NSEvent.removeMonitor(petEventMonitor) }
+        if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
         reminderTimer?.invalidate()
         todosCancellable?.cancel()
         NotificationCenter.default.removeObserver(self)
@@ -1771,7 +1767,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installPetClickMonitor() {
         petEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
-            guard let self, event.window === self.petWindow else { return event }
+            guard let self else { return event }
+
+            if event.type == .leftMouseDown,
+               self.model.panelOpen,
+               event.window !== self.todoWindow,
+               event.window !== self.petWindow,
+               event.window !== self.reminderWindow {
+                self.hideTodoPanel()
+            }
+
+            guard event.window === self.petWindow else { return event }
 
             if event.type == .leftMouseDown {
                 self.petClickStartOrigin = self.petWindow.frame.origin
@@ -1786,6 +1792,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return event
         }
+
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.hideTodoPanelIfClickedOutside(at: event.locationInWindow)
+            }
+        }
     }
 
     private func hideTodoPanel() {
@@ -1794,8 +1806,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow.orderFrontRegardless()
     }
 
-    @objc private func applicationDidResignActive() {
-        if model.panelOpen { hideTodoPanel() }
+    private func hideTodoPanelIfClickedOutside(at point: NSPoint) {
+        guard model.panelOpen else { return }
+        guard !todoWindow.frame.contains(point),
+              !petWindow.frame.contains(point),
+              !reminderWindow.frame.contains(point) else { return }
+        hideTodoPanel()
     }
 
     @objc private func petWindowDidMove() {
