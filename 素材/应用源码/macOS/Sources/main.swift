@@ -32,13 +32,46 @@ private struct TodoItem: Codable, Identifiable, Equatable {
     var done: Bool
     var dueAt: Date
     var period: TodoPeriod?
+    var remindAt: Date?
 
-    init(id: UUID = UUID(), text: String, done: Bool = false, dueAt: Date, period: TodoPeriod? = nil) {
+    init(
+        id: UUID = UUID(),
+        text: String,
+        done: Bool = false,
+        dueAt: Date,
+        period: TodoPeriod? = nil,
+        remindAt: Date? = nil
+    ) {
         self.id = id
         self.text = text
         self.done = done
         self.dueAt = dueAt
         self.period = period
+        self.remindAt = remindAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, text, done, dueAt, period, remindAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        text = try container.decode(String.self, forKey: .text)
+        done = try container.decode(Bool.self, forKey: .done)
+        dueAt = try container.decode(Date.self, forKey: .dueAt)
+        period = try container.decodeIfPresent(TodoPeriod.self, forKey: .period)
+        remindAt = try container.decodeIfPresent(Date.self, forKey: .remindAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(text, forKey: .text)
+        try container.encode(done, forKey: .done)
+        try container.encode(dueAt, forKey: .dueAt)
+        try container.encodeIfPresent(period, forKey: .period)
+        try container.encodeIfPresent(remindAt, forKey: .remindAt)
     }
 }
 
@@ -68,6 +101,7 @@ private final class PetModel: ObservableObject {
         didSet { persistIfReady() }
     }
     @Published var panelOpen = false
+    @Published private var reminderTick = Date()
 
     private var ready = false
     private let defaults = UserDefaults.standard
@@ -132,19 +166,45 @@ private final class PetModel: ObservableObject {
         }
     }
 
-    func add(_ text: String, dueAt: Date, period: TodoPeriod?) {
+    var activeReminders: [TodoItem] {
+        let now = reminderTick
+        return todos
+            .filter { !$0.done && ($0.remindAt ?? .distantFuture) <= now }
+            .sorted { ($0.remindAt ?? .distantFuture) < ($1.remindAt ?? .distantFuture) }
+    }
+
+    func refreshReminderState() {
+        reminderTick = Date()
+    }
+
+    func add(_ text: String, dueAt: Date, period: TodoPeriod?, remindAt: Date?) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         todos.append(TodoItem(
             text: trimmed,
             dueAt: Calendar.current.startOfDay(for: dueAt),
-            period: period
+            period: period,
+            remindAt: remindAt
         ))
     }
 
     func toggle(_ id: UUID) {
         guard let index = todos.firstIndex(where: { $0.id == id }) else { return }
         todos[index].done.toggle()
+        if todos[index].done {
+            todos[index].remindAt = nil
+        }
+    }
+
+    func complete(_ id: UUID) {
+        guard let index = todos.firstIndex(where: { $0.id == id }) else { return }
+        todos[index].done = true
+        todos[index].remindAt = nil
+    }
+
+    func postponeReminder(_ id: UUID, until date: Date) {
+        guard let index = todos.firstIndex(where: { $0.id == id }) else { return }
+        todos[index].remindAt = date
     }
 
     func remove(_ id: UUID) {
@@ -221,6 +281,8 @@ private struct TodoPanelView: View {
     @State private var draft = ""
     @State private var draftDueDate = Date()
     @State private var draftPeriod: TodoPeriod?
+    @State private var draftReminderEnabled = false
+    @State private var draftReminderAt = Date().addingTimeInterval(10 * 60)
     @State private var showingDatePicker = false
     @State private var composerExpanded = false
     @State private var referenceDate = Date()
@@ -518,6 +580,49 @@ private struct TodoPanelView: View {
                 }
                     .padding(.leading, 1)
                     .padding(.trailing, 5)
+
+                    Divider().opacity(0.45)
+
+                    HStack(spacing: 7) {
+                        Image(systemName: "bell")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.39, green: 0.49, blue: 0.70))
+                            .frame(width: 14, height: 14)
+                        Text("提醒")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.48, green: 0.52, blue: 0.62))
+                            .frame(width: 28, alignment: .leading)
+                        Spacer()
+                        Toggle("", isOn: $draftReminderEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+                    .padding(.horizontal, 4)
+
+                    if draftReminderEnabled {
+                        HStack(spacing: 7) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.39, green: 0.49, blue: 0.70))
+                                .frame(width: 14, height: 14)
+                            Text("时间")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.48, green: 0.52, blue: 0.62))
+                                .frame(width: 28, alignment: .leading)
+                            Spacer()
+                            DatePicker(
+                                "提醒时间",
+                                selection: $draftReminderAt,
+                                in: Date()...,
+                                displayedComponents: [.date, .hourAndMinute]
+                            )
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 4)
+                    }
                 }
             }
             .padding(.leading, 11)
@@ -692,10 +797,17 @@ private struct TodoPanelView: View {
             inputFocused = true
             return
         }
-        model.add(trimmed, dueAt: draftDueDate, period: draftPeriod)
+        model.add(
+            trimmed,
+            dueAt: draftDueDate,
+            period: draftPeriod,
+            remindAt: draftReminderEnabled ? draftReminderAt : nil
+        )
         draft = ""
         draftDueDate = referenceDate
         draftPeriod = nil
+        draftReminderEnabled = false
+        draftReminderAt = Date().addingTimeInterval(10 * 60)
         inputFocused = false
         showingDatePicker = false
         withAnimation(.easeInOut(duration: 0.16)) {
@@ -812,6 +924,140 @@ private struct TodoPanelView: View {
 
 }
 
+private struct ReminderPanelView: View {
+    @ObservedObject var model: PetModel
+    @State private var nextReminderAt = Date().addingTimeInterval(15 * 60)
+
+    private var reminder: TodoItem? {
+        model.activeReminders.first
+    }
+
+    var body: some View {
+        Group {
+            if let reminder {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(Color(red: 0.31, green: 0.44, blue: 0.72))
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(Color(red: 0.89, green: 0.92, blue: 0.98)))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("迪莫提醒")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Color(red: 0.18, green: 0.24, blue: 0.38))
+                            Text("完成前会一直留在桌面最上方")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Color(red: 0.48, green: 0.52, blue: 0.62))
+                        }
+                        Spacer()
+                        Button {} label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
+                                .frame(width: 27, height: 27)
+                                .background(Circle().fill(Color(red: 0.94, green: 0.95, blue: 0.97)))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(true)
+                        .help("完成任务后提醒会自动关闭")
+                    }
+
+                    Text(reminder.text)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.16, green: 0.21, blue: 0.33))
+                        .lineLimit(3)
+                        .padding(.top, 19)
+
+                    if let date = reminder.remindAt {
+                        Text("原定提醒：\(reminderDateLabel(date))")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Color(red: 0.50, green: 0.54, blue: 0.64))
+                            .padding(.top, 6)
+                    }
+
+                    Divider().opacity(0.6).padding(.vertical, 15)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.38, green: 0.48, blue: 0.70))
+                        Text("下次提醒")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.43, green: 0.47, blue: 0.57))
+                        Spacer()
+                        DatePicker(
+                            "下次提醒时间",
+                            selection: $nextReminderAt,
+                            in: Date()...,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .controlSize(.small)
+                    }
+
+                    HStack(spacing: 9) {
+                        Button {
+                            model.postponeReminder(reminder.id, until: nextReminderAt)
+                        } label: {
+                            Text("到时再提醒")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.67))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 34)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(red: 0.90, green: 0.93, blue: 0.98))
+                                )
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            model.complete(reminder.id)
+                        } label: {
+                            Text("完成任务")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 34)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(red: 0.31, green: 0.44, blue: 0.72))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 14)
+                }
+                .padding(20)
+                .frame(width: 370)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(Color(red: 1.0, green: 0.995, blue: 0.975))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(Color(red: 0.31, green: 0.44, blue: 0.72).opacity(0.18), lineWidth: 1)
+                        )
+                )
+                .onAppear { resetNextReminderDate() }
+                .onChange(of: reminder.id) { _ in resetNextReminderDate() }
+            }
+        }
+    }
+
+    private func resetNextReminderDate() {
+        nextReminderAt = Date().addingTimeInterval(15 * 60)
+    }
+
+    private func reminderDateLabel(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 HH:mm"
+        return formatter.string(from: date)
+    }
+}
+
 private final class PetPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -893,14 +1139,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = PetModel()
     private var petWindow: PetPanel!
     private var todoWindow: TodoPanel!
+    private var reminderWindow: TodoPanel!
     private var petEventMonitor: Any?
     private var petClickStartOrigin: NSPoint?
+    private var reminderTimer: Timer?
+    private var todosCancellable: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         createPetWindow()
         createTodoWindow()
+        createReminderWindow()
         positionPetWindow()
         petWindow.orderFrontRegardless()
+
+        todosCancellable = model.$todos.sink { [weak self] _ in
+            self?.updateReminderWindow()
+        }
+        reminderTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.model.refreshReminderState()
+                self?.updateReminderWindow()
+            }
+        }
+        updateReminderWindow()
 
         NotificationCenter.default.addObserver(
             self,
@@ -920,6 +1181,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         if let petEventMonitor { NSEvent.removeMonitor(petEventMonitor) }
+        reminderTimer?.invalidate()
+        todosCancellable?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -974,6 +1237,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         todoWindow.contentView = FirstMouseHostingView(rootView: root)
     }
 
+    private func createReminderWindow() {
+        reminderWindow = TodoPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 370, height: 255),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        reminderWindow.level = .screenSaver
+        reminderWindow.backgroundColor = .clear
+        reminderWindow.isOpaque = false
+        reminderWindow.hasShadow = true
+        reminderWindow.hidesOnDeactivate = false
+        reminderWindow.isReleasedWhenClosed = false
+        reminderWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        reminderWindow.contentView = FirstMouseHostingView(rootView: ReminderPanelView(model: model))
+    }
+
     private func positionPetWindow() {
         guard let visibleFrame = NSScreen.main?.visibleFrame else { return }
         let defaults = UserDefaults.standard
@@ -1001,6 +1281,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         x = min(max(x, visible.minX + 14), visible.maxX - todoWindow.frame.width - 14)
         y = min(max(y, visible.minY + 14), visible.maxY - todoWindow.frame.height - 14)
         todoWindow.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func positionReminderWindow() {
+        guard let screen = NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let x = visible.maxX - reminderWindow.frame.width - 24
+        let y = visible.maxY - reminderWindow.frame.height - 24
+        reminderWindow.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func updateReminderWindow() {
+        guard !model.activeReminders.isEmpty else {
+            reminderWindow?.orderOut(nil)
+            return
+        }
+        positionReminderWindow()
+        reminderWindow.orderFrontRegardless()
     }
 
     private func toggleTodoPanel() {
