@@ -1,5 +1,5 @@
-<img src="macOS/Resources/dimo-watercolor.png" alt="迪莫头像" width="180" align="right">
-<img src="docs/readme-title.svg" alt="迪莫桌宠" width="72%">
+<img src="素材/应用源码/macOS/Resources/dimo-watercolor.png" alt="迪莫头像" width="180" align="right">
+<img src="素材/README配图/readme-title.svg" alt="迪莫桌宠" width="72%">
 
 一只安静待在 macOS 桌面角落的迪莫。点击迪莫会展开 Todo 清单，再点击其他地方就会自动收起。
 
@@ -21,7 +21,7 @@
 
 Apple Silicon Mac（M1/M2/M3/M4 等）下载：
 
-[`dist/迪莫桌宠-1.0-macOS-arm64.zip`](dist/%E8%BF%AA%E8%8E%AB%E6%A1%8C%E5%AE%A0-1.0-macOS-arm64.zip)
+[`迪莫桌宠-1.0-macOS-arm64.zip`](%E8%BF%AA%E8%8E%AB%E6%A1%8C%E5%AE%A0-1.0-macOS-arm64.zip)
 
 解压后把“迪莫桌宠.app”拖进“应用程序”文件夹即可。本项目当前不提供 Intel 版本。
 
@@ -36,15 +36,13 @@ Apple Silicon Mac（M1/M2/M3/M4 等）下载：
 需要 macOS 13 或更高版本，以及 Xcode Command Line Tools：
 
 ```bash
-./scripts/build-macos.sh
+./素材/制作脚本/build-macos.sh
 ```
 
-构建结果位于 `build/迪莫桌宠.app`，压缩安装包位于 `dist/`。
+构建会直接更新仓库最外层的当前版本安装包。
 
 ## 项目结构
 
-- `macOS/Sources/main.swift`：SwiftUI 与 AppKit 源码
-- `macOS/Resources/`：迪莫图片和应用图标
-- `macOS/Info.plist`：应用信息与正式版本号
-- `VERSION`：仓库版本号
-- `CHANGELOG.md`：版本更新记录
+- `素材/`：应用源码、图片、图标、制作脚本与版本记录
+- `历史版本/`：新版本发布后，旧版安装包会移到这里
+- `迪莫桌宠-1.0-macOS-arm64.zip`：当前可直接安装的版本
